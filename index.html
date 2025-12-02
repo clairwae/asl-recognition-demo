@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASL Recognition - Live Demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1640029074"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            color: #333;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            animation: fadeIn 1s ease-in;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 30px;
+            max-width: 1200px;
+            width: 100%;
+            animation: slideUp 0.8s ease-out;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 968px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .camera-section {
+            position: relative;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            background: #000;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        #webcam {
+            width: 100%;
+            height: auto;
+            display: block;
+            transform: scaleX(-1);
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+        }
+
+        .hand-indicator {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .hand-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ff4444;
+            animation: pulse 1.5s infinite;
+        }
+
+        .hand-dot.detected {
+            background: #44ff44;
+        }
+
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .results-section {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .prediction-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+        }
+
+        .prediction-label {
+            font-size: 1rem;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+
+        .prediction-value {
+            font-size: 4rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .prediction-confidence {
+            font-size: 1.5rem;
+            opacity: 0.9;
+        }
+
+        .top-predictions {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+        }
+
+        .top-predictions h3 {
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+
+        .prediction-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 12px;
+            padding: 10px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        .prediction-rank {
+            width: 30px;
+            height: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .prediction-class {
+            font-size: 1.5rem;
+            font-weight: bold;
+            min-width: 40px;
+        }
+
+        .prediction-bar {
+            flex: 1;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .prediction-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.5s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            color: white;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .status-message {
+            text-align: center;
+            padding: 15px;
+            background: #fff3cd;
+            border-radius: 10px;
+            color: #856404;
+            margin-bottom: 20px;
+        }
+
+        .status-message.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-message.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            color: white;
+            opacity: 0.8;
+            font-size: 0.9rem;
+        }
+
+        .instructions {
+            background: #e7f3ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .instructions h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .instructions ul {
+            margin-left: 20px;
+        }
+
+        .instructions li {
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🤟 ASL Sign Language Recognition</h1>
+        <p>Real-time American Sign Language recognition powered by deep learning</p>
+    </div>
+
+    <div class="container">
+        <div id="statusMessage" class="status-message">
+            <span class="loading-spinner"></span> Loading model... Please wait
+        </div>
+
+        <div class="instructions">
+            <h4>📋 How to Use:</h4>
+            <ul>
+                <li>Click "Start Camera" to enable your webcam</li>
+                <li>Position your hand clearly in front of the camera</li>
+                <li>Make an ASL sign (A-Z or 0-9)</li>
+                <li>Click "Capture & Predict" to get the prediction</li>
+                <li>Try different signs and see the results!</li>
+            </ul>
+        </div>
+
+        <div class="main-content">
+            <div class="camera-section">
+                <div class="video-container">
+                    <video id="webcam" autoplay playsinline></video>
+                    <canvas id="canvas"></canvas>
+                    <div class="hand-indicator">
+                        <div class="hand-dot" id="handDot"></div>
+                        <span id="handStatus">No hand detected</span>
+                    </div>
+                </div>
+                <div class="controls">
+                    <button class="btn btn-primary" id="startBtn">
+                        📷 Start Camera
+                    </button>
+                    <button class="btn btn-primary" id="captureBtn" disabled>
+                        🎯 Capture & Predict
+                    </button>
+                    <button class="btn btn-secondary" id="stopBtn" disabled>
+                        ⏹️ Stop
+                    </button>
+                </div>
+            </div>
+
+            <div class="results-section">
+                <div class="prediction-card">
+                    <div class="prediction-label">Predicted Sign</div>
+                    <div class="prediction-value" id="predictedSign">-</div>
+                    <div class="prediction-confidence" id="confidence">Ready to predict</div>
+                </div>
+
+                <div class="top-predictions">
+                    <h3>Top 5 Predictions</h3>
+                    <div id="topPredictions">
+                        <p style="text-align: center; color: #999;">Waiting for prediction...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>Built with TensorFlow.js and MediaPipe | ASL Recognition Model v1.0</p>
+    </div>
+
+    <script>
+        // ASL Classes
+        const classes = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 
+                        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 
+                        'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 
+                        'U', 'V', 'W', 'X', 'Y', 'Z'];
+
+        // Global variables
+        let model = null;
+        let stream = null;
+        let handDetected = false;
+        const IMG_SIZE = 96;
+
+        // DOM elements
+        const webcam = document.getElementById('webcam');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const startBtn = document.getElementById('startBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusMessage = document.getElementById('statusMessage');
+        const handDot = document.getElementById('handDot');
+        const handStatus = document.getElementById('handStatus');
+
+        // Load model (NOTE: You'll need to convert your model to TensorFlow.js format)
+        async function loadModel() {
+            try {
+                updateStatus('Loading model...', 'info');
+                // Replace this URL with your actual model path
+                // You need to convert your .h5 model to TensorFlow.js format first
+                // Use: tensorflowjs_converter --input_format keras model.h5 model_js/
+                
+                // For demo purposes, we'll create a dummy prediction function
+                model = { loaded: true }; // Placeholder
+                
+                updateStatus('Model loaded successfully! Click "Start Camera" to begin.', 'success');
+                startBtn.disabled = false;
+            } catch (error) {
+                updateStatus('Error loading model: ' + error.message, 'error');
+            }
+        }
+
+        // Start camera
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480 } 
+                });
+                webcam.srcObject = stream;
+                
+                webcam.onloadedmetadata = () => {
+                    canvas.width = webcam.videoWidth;
+                    canvas.height = webcam.videoHeight;
+                };
+
+                startBtn.disabled = true;
+                captureBtn.disabled = false;
+                stopBtn.disabled = false;
+                updateStatus('Camera started! Position your hand and click "Capture & Predict"', 'success');
+            } catch (error) {
+                updateStatus('Error accessing camera: ' + error.message, 'error');
+            }
+        }
+
+        // Stop camera
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                webcam.srcObject = null;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                startBtn.disabled = false;
+                captureBtn.disabled = true;
+                stopBtn.disabled = true;
+                updateStatus('Camera stopped. Click "Start Camera" to begin again.', 'info');
+            }
+        }
+
+        // Capture and predict
+        async function captureAndPredict() {
+            if (!model || !stream) return;
+
+            try {
+                captureBtn.disabled = true;
+                updateStatus('Processing image...', 'info');
+
+                // Draw current frame to canvas
+                ctx.drawImage(webcam, 0, 0, canvas.width, canvas.height);
+
+                // Get image data
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                
+                // Preprocess image (resize, normalize)
+                const processedImage = preprocessImage(imageData);
+
+                // Make prediction
+                const predictions = await predict(processedImage);
+
+                // Display results
+                displayResults(predictions);
+
+                updateStatus('Prediction complete!', 'success');
+                captureBtn.disabled = false;
+            } catch (error) {
+                updateStatus('Error during prediction: ' + error.message, 'error');
+                captureBtn.disabled = false;
+            }
+        }
+
+        // Preprocess image
+        function preprocessImage(imageData) {
+            // Create a temporary canvas for resizing
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = IMG_SIZE;
+            tempCanvas.height = IMG_SIZE;
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            // Draw and resize
+            const img = new Image();
+            img.src = canvas.toDataURL();
+            tempCtx.drawImage(canvas, 0, 0, IMG_SIZE, IMG_SIZE);
+            
+            // Get pixel data
+            const resizedData = tempCtx.getImageData(0, 0, IMG_SIZE, IMG_SIZE);
+            const pixels = new Float32Array(IMG_SIZE * IMG_SIZE * 3);
+            
+            // Normalize to [-1, 1] (MobileNetV2 preprocessing)
+            for (let i = 0; i < resizedData.data.length; i += 4) {
+                const idx = (i / 4) * 3;
+                pixels[idx] = (resizedData.data[i] / 127.5) - 1;     // R
+                pixels[idx + 1] = (resizedData.data[i + 1] / 127.5) - 1; // G
+                pixels[idx + 2] = (resizedData.data[i + 2] / 127.5) - 1; // B
+            }
+            
+            return pixels;
+        }
+
+        // Predict (DEMO - Replace with actual model inference)
+        async function predict(imageData) {
+            // This is a DEMO function that returns random predictions
+            // Replace this with actual TensorFlow.js model.predict() call
+            
+            // Simulate prediction delay
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Generate random predictions for demo
+            const predictions = classes.map((cls, idx) => ({
+                class: cls,
+                probability: Math.random()
+            }));
+            
+            // Sort by probability
+            predictions.sort((a, b) => b.probability - a.probability);
+            
+            // Normalize to sum to 1
+            const total = predictions.reduce((sum, p) => sum + p.probability, 0);
+            predictions.forEach(p => p.probability /= total);
+            
+            return predictions;
+        }
+
+        // Display results
+        function displayResults(predictions) {
+            const topPred = predictions[0];
+            const top5 = predictions.slice(0, 5);
+
+            // Update main prediction
+            document.getElementById('predictedSign').textContent = topPred.class;
+            document.getElementById('confidence').textContent = 
+                `${(topPred.probability * 100).toFixed(1)}% confidence`;
+
+            // Update top 5
+            const top5HTML = top5.map((pred, idx) => `
+                <div class="prediction-item">
+                    <div class="prediction-rank">${idx + 1}</div>
+                    <div class="prediction-class">${pred.class}</div>
+                    <div class="prediction-bar">
+                        <div class="prediction-bar-fill" style="width: ${pred.probability * 100}%">
+                            ${(pred.probability * 100).toFixed(1)}%
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('topPredictions').innerHTML = top5HTML;
+        }
+
+        // Update status message
+        function updateStatus(message, type = 'info') {
+            statusMessage.textContent = message;
+            statusMessage.className = 'status-message ' + type;
+            
+            if (type === 'info') {
+                statusMessage.innerHTML = '<span class="loading-spinner"></span> ' + message;
+            }
+        }
+
+        // Event listeners
+        startBtn.addEventListener('click', startCamera);
+        captureBtn.addEventListener('click', captureAndPredict);
+        stopBtn.addEventListener('click', stopCamera);
+
+        // Initialize
+        window.addEventListener('load', loadModel);
+    </script>
+</body>
+</html>

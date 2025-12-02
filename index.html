@@ -440,7 +440,7 @@
                 updateStatus('Loading model...', 'info');
                 
                 // Load the actual TensorFlow.js model
-                model = await tf.loadLayersModel('./tfjs_model/model.json');
+                model = await tf.loadLayersModel('./model.json');
                 
                 // Warm up the model with a dummy prediction
                 const warmupTensor = tf.zeros([1, IMG_SIZE, IMG_SIZE, 3]);

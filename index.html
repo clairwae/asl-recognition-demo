@@ -443,7 +443,7 @@
                 // Use: tensorflowjs_converter --input_format keras model.h5 model_js/
                 
                 // For demo purposes, we'll create a dummy prediction function
-                model = { loaded: true }; // Placeholder
+                model = await tf.loadLayersModel('./tfjs_model/model.json');
                 
                 updateStatus('Model loaded successfully! Click "Start Camera" to begin.', 'success');
                 startBtn.disabled = false;
@@ -549,17 +549,20 @@
 
         // Predict (DEMO - Replace with actual model inference)
         async function predict(imageData) {
-            // This is a DEMO function that returns random predictions
-            // Replace this with actual TensorFlow.js model.predict() call
-            
-            // Simulate prediction delay
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // Generate random predictions for demo
-            const predictions = classes.map((cls, idx) => ({
-                class: cls,
-                probability: Math.random()
-            }));
+        // Reshape image data to tensor
+        const tensor = tf.tensor4d(imageData, [1, IMG_SIZE, IMG_SIZE, 3]);
+    
+        // Make prediction
+        const predictions = await model.predict(tensor).data();
+    
+        // Clean up tensor to prevent memory leak
+        tensor.dispose();
+    
+        // Convert to array of objects
+        const results = classes.map((cls, idx) => ({
+               class: cls,
+            probability: predictions[idx]
+        }));
             
             // Sort by probability
             predictions.sort((a, b) => b.probability - a.probability);

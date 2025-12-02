@@ -434,21 +434,24 @@
         const handDot = document.getElementById('handDot');
         const handStatus = document.getElementById('handStatus');
 
-        // Load model (NOTE: You'll need to convert your model to TensorFlow.js format)
+        // Load model
         async function loadModel() {
             try {
                 updateStatus('Loading model...', 'info');
-                // Replace this URL with your actual model path
-                // You need to convert your .h5 model to TensorFlow.js format first
-                // Use: tensorflowjs_converter --input_format keras model.h5 model_js/
                 
-                // For demo purposes, we'll create a dummy prediction function
+                // Load the actual TensorFlow.js model
                 model = await tf.loadLayersModel('./tfjs_model/model.json');
+                
+                // Warm up the model with a dummy prediction
+                const warmupTensor = tf.zeros([1, IMG_SIZE, IMG_SIZE, 3]);
+                await model.predict(warmupTensor).data();
+                warmupTensor.dispose();
                 
                 updateStatus('Model loaded successfully! Click "Start Camera" to begin.', 'success');
                 startBtn.disabled = false;
             } catch (error) {
-                updateStatus('Error loading model: ' + error.message, 'error');
+                updateStatus('Error loading model: ' + error.message + ' (Make sure tfjs_model folder is uploaded)', 'error');
+                console.error('Model loading error:', error);
             }
         }
 
@@ -547,31 +550,35 @@
             return pixels;
         }
 
-        // Predict (DEMO - Replace with actual model inference)
+        // Predict (REAL MODEL INFERENCE)
         async function predict(imageData) {
-        // Reshape image data to tensor
-        const tensor = tf.tensor4d(imageData, [1, IMG_SIZE, IMG_SIZE, 3]);
-    
-        // Make prediction
-        const predictions = await model.predict(tensor).data();
-    
-        // Clean up tensor to prevent memory leak
-        tensor.dispose();
-    
-        // Convert to array of objects
-        const results = classes.map((cls, idx) => ({
-               class: cls,
-            probability: predictions[idx]
-        }));
-            
-            // Sort by probability
-            predictions.sort((a, b) => b.probability - a.probability);
-            
-            // Normalize to sum to 1
-            const total = predictions.reduce((sum, p) => sum + p.probability, 0);
-            predictions.forEach(p => p.probability /= total);
-            
-            return predictions;
+            try {
+                // Reshape image data to tensor [1, 96, 96, 3]
+                const tensor = tf.tensor4d(imageData, [1, IMG_SIZE, IMG_SIZE, 3]);
+                
+                // Make prediction
+                const predictionTensor = model.predict(tensor);
+                const predictions = await predictionTensor.data();
+                
+                // Clean up tensors to prevent memory leaks
+                tensor.dispose();
+                predictionTensor.dispose();
+                
+                // Convert to array of objects with class names
+                const results = classes.map((cls, idx) => ({
+                    class: cls,
+                    probability: predictions[idx]
+                }));
+                
+                // Sort by probability (highest first)
+                results.sort((a, b) => b.probability - a.probability);
+                
+                return results;
+            } catch (error) {
+                console.error('Prediction error:', error);
+                updateStatus('Prediction failed: ' + error.message, 'error');
+                throw error;
+            }
         }
 
         // Display results
